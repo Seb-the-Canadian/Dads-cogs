@@ -1,4 +1,5 @@
 import { useRouter } from "next/router";
+import { useSession } from "next-auth/react";
 import Head from "next/head";
 import Link from "next/link";
 import { Button } from "~/components/ui/button";
@@ -9,10 +10,11 @@ import { api } from "~/utils/api";
 export default function LeaguePage() {
   const router = useRouter();
   const { slug } = router.query;
+  const { data: session } = useSession();
 
   const { data: league, isLoading } = api.league.getBySlug.useQuery(
     { slug: slug as string },
-    { enabled: !!slug }
+    { enabled: !!slug },
   );
 
   if (isLoading) {
@@ -49,7 +51,10 @@ export default function LeaguePage() {
     <>
       <Head>
         <title>{league.name} - Dads-cogs</title>
-        <meta name="description" content={`Season leaderboard for ${league.name}`} />
+        <meta
+          name="description"
+          content={`Season leaderboard for ${league.name}`}
+        />
       </Head>
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
@@ -80,8 +85,15 @@ export default function LeaguePage() {
 
             <div className="space-y-4">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Rounds</CardTitle>
+                  {session?.user?.id === league.adminId && (
+                    <Button asChild size="sm">
+                      <Link href={`/round/create?slug=${league.slug}`}>
+                        + New Round
+                      </Link>
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent>
                   {league.rounds.length > 0 ? (
@@ -119,7 +131,9 @@ export default function LeaguePage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold">{league.members.length}</p>
-                  <p className="text-sm text-muted-foreground">Dads competing</p>
+                  <p className="text-sm text-muted-foreground">
+                    Dads competing
+                  </p>
                 </CardContent>
               </Card>
             </div>

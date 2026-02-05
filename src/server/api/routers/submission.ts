@@ -1,6 +1,12 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { addTracksToPlaylist } from "~/server/spotify";
+import {
+  addTracksToPlaylist,
+  extractTrackId,
+  lookupTrack,
+  refreshAdminToken,
+} from "~/server/spotify";
 
 export const submissionRouter = createTRPCRouter({
   submit: protectedProcedure
@@ -12,7 +18,7 @@ export const submissionRouter = createTRPCRouter({
         artistName: z.string(),
         albumArt: z.string().optional(),
         previewUrl: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const round = await ctx.db.round.findUnique({
@@ -109,5 +115,21 @@ export const submissionRouter = createTRPCRouter({
         ...submission,
         user: round.status === "COMPLETED" ? submission.user : null,
       }));
+    }),
+
+  lookupTrack: protectedProcedure
+    .input(z.object({ spotifyUrl: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const trackId = extractTrackId(input.spotifyUrl);
+      if (!trackId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Could not parse a Spotify track ID. Paste a Spotify track link, URI, or ID.",
+        });
+      }
+
+      const accessToken = await refreshAdminToken(ctx.session.user.id);
+      return lookupTrack(trackId, accessToken);
     }),
 });

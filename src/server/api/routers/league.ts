@@ -115,14 +115,29 @@ export const leagueRouter = createTRPCRouter({
         });
       }
 
-      const member = await ctx.db.leagueMember.create({
-        data: {
-          userId: ctx.session.user.id,
-          leagueId: league.id,
-        },
-      });
+      try {
+        const member = await ctx.db.leagueMember.create({
+          data: {
+            userId: ctx.session.user.id,
+            leagueId: league.id,
+          },
+        });
 
-      return member;
+        return member;
+      } catch (err) {
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          "code" in err &&
+          (err as { code: string }).code === "P2002"
+        ) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "You are already a member of this league",
+          });
+        }
+        throw err;
+      }
     }),
 
   getLeaderboard: publicProcedure

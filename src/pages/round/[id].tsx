@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
@@ -68,13 +68,59 @@ function SubmissionForm({
   } | null;
 }) {
   const utils = api.useUtils();
-  const [spotifyTrackId, setSpotifyTrackId] = useState(
-    existing?.spotifyTrackId ?? "",
-  );
-  const [trackName, setTrackName] = useState(existing?.trackName ?? "");
-  const [artistName, setArtistName] = useState(existing?.artistName ?? "");
-  const [albumArt, setAlbumArt] = useState(existing?.albumArt ?? "");
+  const [spotifyUrl, setSpotifyUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [trackData, setTrackData] = useState<{
+    spotifyTrackId: string;
+    trackName: string;
+    artistName: string;
+    albumArt: string | null;
+    previewUrl: string | null;
+  } | null>(
+    existing
+      ? {
+          spotifyTrackId: existing.spotifyTrackId,
+          trackName: existing.trackName,
+          artistName: existing.artistName,
+          albumArt: existing.albumArt,
+          previewUrl: null,
+        }
+      : null,
+  );
+
+  const [lookupInput, setLookupInput] = useState<string | null>(null);
+  const {
+    data: lookupResult,
+    isFetching: isLookingUp,
+    error: lookupError,
+  } = api.submission.lookupTrack.useQuery(
+    { spotifyUrl: lookupInput ?? "" },
+    {
+      enabled: !!lookupInput,
+      retry: false,
+    },
+  );
+
+  useEffect(() => {
+    if (lookupResult) {
+      setTrackData({
+        spotifyTrackId: lookupResult.spotifyTrackId,
+        trackName: lookupResult.trackName,
+        artistName: lookupResult.artistName,
+        albumArt: lookupResult.albumArt,
+        previewUrl: lookupResult.previewUrl,
+      });
+      setLookupInput(null);
+      setError(null);
+    }
+  }, [lookupResult]);
+
+  useEffect(() => {
+    if (lookupError) {
+      setError(lookupError.message);
+      setLookupInput(null);
+    }
+  }, [lookupError]);
 
   const submit = api.submission.submit.useMutation({
     onSuccess: () => {
@@ -87,116 +133,119 @@ function SubmissionForm({
     },
   });
 
+  const handleLookup = () => {
+    const trimmed = spotifyUrl.trim();
+    if (!trimmed) return;
+    setError(null);
+    setTrackData(null);
+    setLookupInput(trimmed);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!spotifyTrackId.trim() || !trackName.trim() || !artistName.trim())
-      return;
+    if (!trackData) return;
 
     submit.mutate({
       roundId,
-      spotifyTrackId: spotifyTrackId.trim(),
-      trackName: trackName.trim(),
-      artistName: artistName.trim(),
-      albumArt: albumArt.trim() || undefined,
+      spotifyTrackId: trackData.spotifyTrackId,
+      trackName: trackData.trackName,
+      artistName: trackData.artistName,
+      albumArt: trackData.albumArt ?? undefined,
+      previewUrl: trackData.previewUrl ?? undefined,
     });
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{existing ? "Update Submission" : "Submit a Track"}</CardTitle>
+        <CardTitle>
+          {existing ? "Update Submission" : "Submit a Track"}
+        </CardTitle>
         <CardDescription>
           {existing
             ? "You can update your submission until the submission period ends."
-            : "Choose a Spotify track for this round."}
+            : "Paste a Spotify link to submit a track for this round."}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="trackId" className={labelClass}>
-              Spotify Track ID
-            </label>
-            <input
-              id="trackId"
-              type="text"
-              className={inputClass}
-              placeholder="4iV5W9uYEdYUVa79Axb7Rh"
-              value={spotifyTrackId}
-              onChange={(e) => setSpotifyTrackId(e.target.value)}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              From the Spotify track URL: open.spotify.com/track/
-              <strong>this-part</strong>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="trackName" className={labelClass}>
-              Track Name
-            </label>
-            <input
-              id="trackName"
-              type="text"
-              className={inputClass}
-              placeholder="Bohemian Rhapsody"
-              value={trackName}
-              onChange={(e) => setTrackName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="artistName" className={labelClass}>
-              Artist Name
-            </label>
-            <input
-              id="artistName"
-              type="text"
-              className={inputClass}
-              placeholder="Queen"
-              value={artistName}
-              onChange={(e) => setArtistName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="albumArt" className={labelClass}>
-              Album Art URL{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </label>
-            <input
-              id="albumArt"
-              type="url"
-              className={inputClass}
-              placeholder="https://i.scdn.co/image/..."
-              value={albumArt}
-              onChange={(e) => setAlbumArt(e.target.value)}
-            />
-          </div>
+          {!trackData ? (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="spotifyUrl" className={labelClass}>
+                  Spotify Link
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="spotifyUrl"
+                    type="text"
+                    className={inputClass}
+                    placeholder="https://open.spotify.com/track/..."
+                    value={spotifyUrl}
+                    onChange={(e) => setSpotifyUrl(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleLookup}
+                    disabled={isLookingUp || !spotifyUrl.trim()}
+                  >
+                    {isLookingUp ? "Looking up..." : "Look Up"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  In Spotify: Share → Copy Link, then paste here.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border p-3">
+                {trackData.albumArt && (
+                  <img
+                    src={trackData.albumArt}
+                    alt=""
+                    className="h-12 w-12 rounded"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    &ldquo;{trackData.trackName}&rdquo;
+                  </p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {trackData.artistName}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setTrackData(null);
+                    setSpotifyUrl("");
+                  }}
+                >
+                  Change
+                </Button>
+              </div>
+            </>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={
-              submit.isPending ||
-              !spotifyTrackId.trim() ||
-              !trackName.trim() ||
-              !artistName.trim()
-            }
-          >
-            {submit.isPending
-              ? "Submitting..."
-              : existing
-                ? "Update Submission"
-                : "Submit Track"}
-          </Button>
+          {trackData && (
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={submit.isPending}
+            >
+              {submit.isPending
+                ? "Submitting..."
+                : existing
+                  ? "Update Submission"
+                  : "Submit Track"}
+            </Button>
+          )}
         </form>
       </CardContent>
     </Card>

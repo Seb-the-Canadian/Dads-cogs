@@ -29,7 +29,7 @@ export async function refreshAdminToken(userId: string): Promise<string> {
   }
 
   const basicAuth = Buffer.from(
-    `${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`
+    `${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`,
   ).toString("base64");
 
   const response = await fetch("https://accounts.spotify.com/api/token", {
@@ -112,7 +112,7 @@ export async function createRoundPlaylist(roundId: string): Promise<void> {
         description: `Round ${round.roundNumber} - ${round.league.name}`,
         public: false,
       }),
-    }
+    },
   );
 
   if (!createResponse.ok) {
@@ -132,7 +132,7 @@ export async function createRoundPlaylist(roundId: string): Promise<void> {
 
 export async function addTracksToPlaylist(
   roundId: string,
-  trackIds: string[]
+  trackIds: string[],
 ): Promise<void> {
   const round = await db.round.findUnique({
     where: { id: roundId },
@@ -160,10 +160,88 @@ export async function addTracksToPlaylist(
       body: JSON.stringify({
         uris: trackUris,
       }),
-    }
+    },
   );
 
   if (!response.ok) {
     throw new Error(`Failed to add tracks to playlist: ${response.statusText}`);
   }
+}
+
+interface SpotifyTrackResponse {
+  id: string;
+  name: string;
+  artists: Array<{ name: string }>;
+  album: {
+    images: Array<{ url: string; height: number; width: number }>;
+  };
+  preview_url: string | null;
+  external_urls: {
+    spotify: string;
+  };
+}
+
+export interface TrackLookupResult {
+  spotifyTrackId: string;
+  trackName: string;
+  artistName: string;
+  albumArt: string | null;
+  previewUrl: string | null;
+}
+
+export function extractTrackId(input: string): string | null {
+  const trimmed = input.trim();
+
+  // Spotify URI: spotify:track:4cOdK2wGLETKBW3PvgPWqT
+  const uriMatch = trimmed.match(/^spotify:track:([a-zA-Z0-9]{22})$/);
+  if (uriMatch?.[1]) return uriMatch[1];
+
+  // Spotify URL: https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT?si=...
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === "open.spotify.com") {
+      const pathMatch = url.pathname.match(/^\/track\/([a-zA-Z0-9]{22})/);
+      if (pathMatch?.[1]) return pathMatch[1];
+    }
+  } catch {
+    // Not a URL
+  }
+
+  // Bare track ID (22 char alphanumeric)
+  if (/^[a-zA-Z0-9]{22}$/.test(trimmed)) return trimmed;
+
+  return null;
+}
+
+export async function lookupTrack(
+  trackId: string,
+  accessToken: string,
+): Promise<TrackLookupResult> {
+  const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Track not found on Spotify");
+    }
+    throw new Error(`Spotify API error: ${response.statusText}`);
+  }
+
+  const track = (await response.json()) as SpotifyTrackResponse;
+
+  const albumArt =
+    track.album.images.find((img) => img.height === 300)?.url ??
+    track.album.images[0]?.url ??
+    null;
+
+  return {
+    spotifyTrackId: track.id,
+    trackName: track.name,
+    artistName: track.artists.map((a) => a.name).join(", "),
+    albumArt,
+    previewUrl: track.preview_url,
+  };
 }
