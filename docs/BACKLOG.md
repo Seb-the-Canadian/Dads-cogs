@@ -1,6 +1,6 @@
 # Backlog: Dads-cogs
 
-> Last reconciled against codebase: 2026-02-05 (session 2)
+> Last reconciled against codebase: 2026-02-05 (session 3)
 
 ## Priority Levels
 
@@ -18,55 +18,6 @@
 ---
 
 ## P1 — MVP (before sharing with the group)
-
-### UX-001: Create Round page (admin)
-**Type:** Feature
-
-The `round.create` router exists but there's no UI for league admins to
-create a new round. Admins need to set theme, description, and
-submission/voting date windows.
-
-**Calls:** `api.round.create` (protected, admin-only)
-
-**Acceptance Criteria:**
-- [ ] Admin can create a round from the league detail page
-- [ ] Date pickers for submission and voting windows
-- [ ] Round appears in league rounds list after creation
-
----
-
-### UX-002: Join League page/flow
-**Type:** Feature
-
-`league.join` router exists but no UI calls it. Friends need a way to
-join a league by slug or invite link.
-
-**Calls:** `api.league.join` (protected)
-
-**Acceptance Criteria:**
-- [ ] User can join a league by entering a slug or visiting a link
-- [ ] User appears in league members list after joining
-
----
-
-### UX-003: Spotify track search for submissions
-**Type:** Feature
-
-The submission form currently requires manually entering a Spotify Track
-ID, track name, and artist name. Non-technical users won't know how to
-find a Track ID.
-
-**Options:**
-- A) Add Spotify search API endpoint — user types song name, picks result
-- B) Accept a Spotify track URL and parse the ID from it
-- C) Keep manual entry (workable but friction-heavy)
-
-**Acceptance Criteria (if A):**
-- [ ] Search input that queries Spotify API
-- [ ] Results populate track name, artist, album art, track ID automatically
-- [ ] User just picks from results and submits
-
----
 
 ### PWA-001: Service worker decision
 **Type:** PWA
@@ -166,3 +117,6 @@ No action needed unless new auth features are required.
 | CLEANUP | Removed dead SW code (src/sw.ts, public/sw.js) | 2026-02-05 |
 | ROUND-TS | round.ts: fixed import path, TRPCError, nativeEnum | 2026-02-05 |
 | VITEST | vitest + @vitejs/plugin-react as devDependencies | 2026-02-05 |
+| UX-001 | Create Round page (/round/create) + admin button on league detail | 2026-02-05 |
+| UX-002 | Join League page (/league/join) + CONFLICT error handling | 2026-02-05 |
+| UX-003 | Spotify URL lookup + auto-fill submission form | 2026-02-05 |

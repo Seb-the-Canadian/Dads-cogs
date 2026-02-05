@@ -122,6 +122,74 @@ SW than broken/misleading code.
 
 ---
 
+### DEC-009: Native datetime-local for Date Inputs
+
+**Date:** 2026-02-05
+**Decision:** Use `<input type="datetime-local">` for the Create Round form
+instead of installing a date picker library.
+
+**Rationale:**
+- Zero new dependencies (no react-day-picker, date-fns, etc.)
+- Consistent with DEC-007 (no new Shadcn components)
+- All modern browsers (Chrome, Safari, Firefox, mobile) support it
+- Provides both date and time in one input
+- `superjson` handles `Date` serialization over tRPC automatically
+- Good enough for a hobby project with friends
+
+**Reversibility:** Can swap to a styled date picker later without changing
+the router or data model.
+
+---
+
+### DEC-010: Spotify URL Parsing Over Full Search
+
+**Date:** 2026-02-05
+**Decision:** Accept pasted Spotify URLs/URIs instead of building a full
+search UI. Extract track ID, fetch metadata via Spotify API `/v1/tracks/{id}`.
+
+**Rationale:**
+- Users already know what track they want (find it in Spotify, copy link)
+- URL parsing is far simpler than building search + autocomplete UI
+- Only one new tRPC procedure needed (`submission.lookupTrack`)
+- Reuses existing `refreshAdminToken()` for Spotify API auth
+- Supports three input formats: HTTPS URLs, `spotify:track:` URIs, bare IDs
+- Auto-fills trackName, artistName, albumArt — eliminates 4 manual fields
+
+**What was not built:**
+- Full Spotify search (would need search endpoint, debounced input, results
+  dropdown, pagination). Deferred unless users request it.
+
+---
+
+### DEC-011: Flat Route for Create Round
+
+**Date:** 2026-02-05
+**Decision:** Route Create Round at `/round/create?slug=xxx` instead of
+nesting under `/league/[slug]/round/create`.
+
+**Rationale:**
+- The league detail page is a file (`league/[slug].tsx`), not a directory.
+  Nesting would require converting it to `[slug]/index.tsx`, breaking the
+  existing route and touching more files.
+- Matches the existing pattern: `/round/[id]` is already a flat route.
+- League context (ID, admin check) is fetched via `getBySlug` query using
+  the slug from the query parameter.
+
+---
+
+### DEC-012: Duplicate Join Returns CONFLICT
+
+**Date:** 2026-02-05
+**Decision:** Wrap `leagueMember.create` in a try-catch for Prisma P2002
+(unique constraint on `[userId, leagueId]`). Throw `TRPCError` with code
+`CONFLICT` instead of leaking raw Prisma errors.
+
+**Rationale:** Clean error code lets the client show a friendly "already a
+member" message. Without this, a duplicate join would surface an unhandled
+Prisma error to the user.
+
+---
+
 ## Resolved Questions
 
 ### OQ-002: Is There a Production Database? → RESOLVED
@@ -187,3 +255,4 @@ Verified. `League.adminId` is singular. No multi-admin support.
 |------|--------|--------|
 | 2026-01-31 | Claude Cowork | Initial assessment |
 | 2026-02-05 | Claude Cowork | Session 2: DEC-001 through DEC-008, resolved OQ-002/006, updated all sections |
+| 2026-02-05 | Claude Cowork | Session 3: DEC-009 through DEC-012 (P1 feature decisions) |
