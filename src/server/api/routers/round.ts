@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
+import { TRPCError } from "@trpc/server";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  publicProcedure,
+} from "~/server/api/trpc";
 import { createRoundPlaylist } from "~/server/spotify";
-import { RoundStatus } from "@prisma/client";
+import { RoundStatus } from "../../../../generated/prisma";
 
 export const roundRouter = createTRPCRouter({
   create: protectedProcedure
@@ -14,7 +19,7 @@ export const roundRouter = createTRPCRouter({
         submissionEnd: z.date(),
         votingStart: z.date(),
         votingEnd: z.date(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const league = await ctx.db.league.findUnique({
@@ -22,11 +27,14 @@ export const roundRouter = createTRPCRouter({
       });
 
       if (!league) {
-        throw new Error("League not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "League not found" });
       }
 
       if (league.adminId !== ctx.session.user.id) {
-        throw new Error("Only league admin can create rounds");
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only league admin can create rounds",
+        });
       }
 
       const lastRound = await ctx.db.round.findFirst({
@@ -87,7 +95,7 @@ export const roundRouter = createTRPCRouter({
       z.object({
         roundId: z.string(),
         status: z.nativeEnum(RoundStatus),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const round = await ctx.db.round.findUnique({
@@ -96,11 +104,14 @@ export const roundRouter = createTRPCRouter({
       });
 
       if (!round) {
-        throw new Error("Round not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Round not found" });
       }
 
       if (round.league.adminId !== ctx.session.user.id) {
-        throw new Error("Only league admin can update round status");
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only league admin can update round status",
+        });
       }
 
       const updatedRound = await ctx.db.round.update({

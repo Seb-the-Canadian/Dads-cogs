@@ -1,309 +1,213 @@
 # Backlog: Dads-cogs
 
-## Definition of Done (Ship Criteria)
-
-A feature is "done" when:
-- [ ] Code compiles without TypeScript errors
-- [ ] Feature works in development
-- [ ] Feature works in production build
-- [ ] No console errors in browser
-- [ ] Acceptance criteria met
+> Last reconciled against codebase: 2026-02-05
 
 ## Priority Levels
 
-- **P0:** Ship blocker - must fix before any release
-- **P1:** Critical for MVP - fix before public launch
-- **P2:** Important - fix in first maintenance sprint
-- **P3:** Nice to have - backlog for future
+- **P0:** Ship blocker — must fix before any deployment
+- **P1:** Critical for MVP — fix before sharing with the group
+- **P2:** Important — first maintenance pass
+- **P3:** Nice to have — future
 
 ---
 
-## NOW (P0 - Ship Blockers)
+## P0 — Ship Blockers
 
-### PWA-001: Create PWA Icon Assets
-**Type:** PWA | **Priority:** P0
+### FIX-001: Fix tRPC client transformer config
+**Type:** Bugfix
 
-**Rationale:** PWA will not install without valid icons. Manifest references files that don't exist.
+The 2 remaining type errors in the build. tRPC 11 moved the `transformer`
+option from `createTRPCNext` config to individual link options
+(`httpBatchLink`). The current code puts `superjson` at the top-level config
+which is the old tRPC 10 pattern.
 
-**Evidence:**
-- `public/manifest.json` references `/android-chrome-192x192.png`
-- File check: Only `favicon.ico` exists in `public/`
+**File:** `src/utils/api.ts:17,24`
 
 **Acceptance Criteria:**
-- [ ] 192x192 PNG icon exists at `public/android-chrome-192x192.png`
-- [ ] 512x512 PNG icon exists at `public/android-chrome-512x512.png`
-- [ ] 180x180 PNG icon exists at `public/apple-touch-icon.png`
-- [ ] Icons display correctly in Chrome DevTools → Application → Manifest
-
-**Effort:** 1 hour
+- [ ] Move `transformer: superjson` into `httpBatchLink()` options
+- [ ] Remove top-level `transformer` from config
+- [ ] `npx tsc --noEmit` exits 0
 
 ---
 
-### PWA-002: Fix Manifest Fields
-**Type:** PWA | **Priority:** P0
+### FIX-002: Create initial Prisma migration
+**Type:** Build
 
-**Rationale:** Incomplete manifest prevents proper PWA behavior.
+No `prisma/migrations/` directory exists. Schema can only be applied via
+`db push` (destructive). A proper migration history is needed for
+reproducible deployments and safe schema evolution.
 
-**Evidence:**
-- `public/manifest.json` missing `start_url`, `scope`
+**File:** `prisma/` (only `schema.prisma` exists)
+
+**Acceptance Criteria:**
+- [ ] `prisma/migrations/` directory with initial migration
+- [ ] `npx prisma migrate dev` succeeds on a fresh database
+- [ ] Migration files committed to git
+
+**Depends on:** A running PostgreSQL instance (local or Neon)
+
+---
+
+### FIX-003: Fix manifest.json for PWA installability
+**Type:** PWA
+
+Missing `start_url` and `scope` fields. No icon marked `maskable`. Chrome
+will refuse to show the install prompt without these.
+
+**File:** `public/manifest.json`
 
 **Acceptance Criteria:**
 - [ ] `start_url` set to `"/"`
 - [ ] `scope` set to `"/"`
-- [ ] At least one icon marked as `"purpose": "maskable"`
-
-**Effort:** 30 minutes
+- [ ] At least one icon has `"purpose": "maskable"`
 
 ---
 
-### PWA-003: Add Viewport Meta Tag
-**Type:** PWA | **Priority:** P0
+### FIX-004: Add viewport meta and apple-touch-icon
+**Type:** PWA
 
-**Rationale:** Missing viewport breaks mobile rendering and PWA install.
+`_document.tsx` has PWA meta tags but is missing the viewport meta tag
+(breaks mobile rendering) and apple-touch-icon link (iOS home screen).
 
-**Evidence:**
-- `src/pages/_document.tsx` has no viewport meta tag
+**File:** `src/pages/_document.tsx`
 
 **Acceptance Criteria:**
-- [ ] `<meta name="viewport" content="width=device-width, initial-scale=1">` in Head
-- [ ] `<link rel="apple-touch-icon" href="/apple-touch-icon.png">` added
-
-**Effort:** 15 minutes
+- [ ] `<meta name="viewport" content="width=device-width, initial-scale=1" />` in Head
+- [ ] `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />` in Head
 
 ---
 
-### PWA-004: Implement Service Worker
-**Type:** PWA | **Priority:** P0
+### FIX-005: Wire up ErrorBoundary in _app.tsx
+**Type:** Bugfix
 
-**Rationale:** No offline support, not a true PWA without service worker.
+`ErrorBoundary.tsx` exists but is never rendered. Unhandled client-side
+errors will still crash the app with a white screen.
 
-**Evidence:**
-- No SW files in codebase
-- No PWA library in `package.json`
+**File:** `src/pages/_app.tsx`
 
 **Acceptance Criteria:**
+- [ ] `<ErrorBoundary>` wraps `<Component />` in `_app.tsx`
+- [ ] Throwing an error in a component shows the error UI, not a white screen
+
+---
+
+## P1 — MVP (before sharing with the group)
+
+### PWA-001: Implement working service worker
+**Type:** PWA
+
+`src/sw.ts` imports `@serwist/next` but the package is not installed and
+`next.config.js` has no serwist integration. The file is dead code.
+`public/sw.js` is a 2-line static stub that does nothing useful.
+
+**Options:**
+- A) Install `@serwist/next`, wire into next.config.js, keep sw.ts
+- B) Remove sw.ts, write a minimal hand-rolled SW in public/sw.js
+- C) Remove all SW code for now, add it when offline support matters
+
+**Acceptance Criteria (if A or B):**
 - [ ] Service worker registered on page load
-- [ ] Static assets cached on install
-- [ ] Offline page displayed when disconnected
-- [ ] DevTools shows active service worker
-
-**Effort:** 4 hours
+- [ ] Static assets cached
+- [ ] DevTools → Application shows active service worker
+- [ ] `@serwist/next` in package.json (if option A)
 
 ---
 
-### BUILD-001: Create Initial Prisma Migration
-**Type:** Build | **Priority:** P0
+### SEC-001: Upgrade next-auth from beta
+**Type:** Security
 
-**Rationale:** No migration history means DB schema cannot be reproduced.
+Running `next-auth@5.0.0-beta.25`. Stable v5 has been released. Beta
+versions have known CVEs and won't receive patches.
 
-**Evidence:**
-- `prisma/` contains only `schema.prisma`, no `migrations/` folder
+**File:** `package.json:33`
 
 **Acceptance Criteria:**
-- [ ] `prisma/migrations/` directory exists with initial migration
-- [ ] `npm run db:migrate` succeeds on fresh database
-- [ ] Migration files committed to git
-
-**Effort:** 30 minutes
+- [ ] `next-auth` upgraded to latest stable v5
+- [ ] Auth flow still works (Spotify OAuth login/logout)
+- [ ] No new type errors introduced
 
 ---
 
-### BUILD-002: Patch Security Vulnerabilities
-**Type:** Build | **Priority:** P0
+### SEC-002: Run npm audit and patch vulnerabilities
+**Type:** Security
 
-**Rationale:** HIGH severity vulnerabilities in production dependencies.
-
-**Evidence:**
-- `npm audit` shows vulnerabilities in next, @trpc/*, next-auth
+Inherited vulnerabilities from pinned beta dependencies. Should be
+addressed after SEC-001 since many will resolve with the upgrade.
 
 **Acceptance Criteria:**
 - [ ] `npm audit` returns 0 high/critical vulnerabilities
-- [ ] Application still builds and runs correctly
-- [ ] Auth flow still works after next-auth upgrade
-
-**Effort:** 1 hour
+- [ ] App still builds and runs
 
 ---
 
-### ERROR-001: Add Global Error Boundary
-**Type:** Bugfix | **Priority:** P0
+## P2 — Post-MVP Maintenance
 
-**Rationale:** Unhandled errors crash entire app with no recovery.
+### FEAT-001: Missing pages (create league, submit track, voting UI)
+**Type:** Feature
 
-**Evidence:**
-- No `_error.tsx` page
-- No React error boundary component
+The app currently has index and league detail pages. Three critical user
+flows have no UI:
+- Create a new league
+- Submit a track to a round
+- Cast votes on submissions
 
-**Acceptance Criteria:**
-- [ ] `src/pages/_error.tsx` handles server errors
-- [ ] Error boundary component catches client errors
-- [ ] User sees friendly error message, not white screen
-- [ ] Error logged (console in dev, service in prod)
-
-**Effort:** 2 hours
+The tRPC routers for all three exist. These need pages/components.
 
 ---
 
-## NEXT (P1 - MVP Requirements)
+### FEAT-002: Wire up Discord webhook notifications
+**Type:** Feature
 
-### TEST-001: Add Critical Path Tests
-**Type:** Test | **Priority:** P1
-
-**Rationale:** Voting/scoring logic is business-critical and untested.
-
-**Evidence:**
-- 0 test files in codebase
-- Vote calculation in `vote.ts` line 146 untested
+`src/server/discord.ts` has complete helper functions for posting round
+status changes to Discord. None are called from any router.
 
 **Acceptance Criteria:**
-- [ ] Test framework configured (Vitest recommended)
-- [ ] Unit tests for `updateSubmissionPoints()` function
-- [ ] Unit tests for admin authorization checks
-- [ ] Tests pass in CI
-
-**Effort:** 6 hours
+- [ ] Webhook fires on round status transitions
+- [ ] Graceful failure if webhook URL missing or request fails
+- [ ] Optional per-league (controlled by `discordWebhookUrl` field)
 
 ---
 
-### TYPE-001: Fix TypeScript Any Types
-**Type:** Refactor | **Priority:** P1
+### DX-001: Set up CI (GitHub Actions)
+**Type:** Build
 
-**Rationale:** `any` types defeat TypeScript benefits.
-
-**Evidence:**
-- `src/server/api/routers/vote.ts` line 141: `db: any`
-- `src/server/api/routers/vote.ts` line 146: reduce with `any`
-
-**Acceptance Criteria:**
-- [ ] All `any` types replaced with proper types
-- [ ] `npm run typecheck` passes
-- [ ] No new `@ts-ignore` comments
-
-**Effort:** 1 hour
+No automated checks on push or PR. Minimum pipeline: type-check, test,
+build.
 
 ---
 
-### ERROR-002: Use TRPCError Instead of Error
-**Type:** Refactor | **Priority:** P1
+### DX-002: Configure ESLint
+**Type:** Build
 
-**Rationale:** Generic errors prevent proper client-side handling.
-
-**Evidence:**
-- All routers throw `new Error()` instead of `new TRPCError()`
-
-**Acceptance Criteria:**
-- [ ] All throws use `TRPCError` with appropriate codes
-- [ ] NOT_FOUND for missing resources
-- [ ] FORBIDDEN for permission denied
-- [ ] BAD_REQUEST for validation failures
-
-**Effort:** 2 hours
+No linting configured. T3 ships with ESLint but it was removed or never
+set up.
 
 ---
 
-### PWA-005: Implement Offline Caching Strategy
-**Type:** PWA | **Priority:** P1
+### OBS-001: Add error tracking (Sentry or similar)
+**Type:** Feature
 
-**Rationale:** Offline support claimed but not functional.
-
-**Acceptance Criteria:**
-- [ ] Previously viewed leagues load when offline
-- [ ] API errors show user-friendly offline message
-- [ ] Submissions queued when offline (stretch)
-
-**Effort:** 4 hours
+Production errors are invisible. ErrorBoundary catches them client-side
+but doesn't report anywhere.
 
 ---
 
-## LATER (P2 - Post-MVP)
+### A11Y-001: Accessibility improvements
+**Type:** Feature
 
-### OBS-001: Add Error Tracking (Sentry)
-**Type:** Feature | **Priority:** P2
-
-**Rationale:** Production errors invisible without tracking.
-
-**Acceptance Criteria:**
-- [ ] Sentry SDK installed and configured
-- [ ] Errors captured with context
-- [ ] Source maps uploaded for readable traces
-
-**Effort:** 3 hours
-
----
-
-### LINT-001: Configure ESLint and Prettier
-**Type:** Build | **Priority:** P2
-
-**Rationale:** No code quality enforcement.
-
-**Acceptance Criteria:**
-- [ ] ESLint configured with Next.js recommended rules
-- [ ] Prettier configured for consistent formatting
-- [ ] Pre-commit hook runs linting
-
-**Effort:** 2 hours
-
----
-
-### CI-001: Set Up GitHub Actions
-**Type:** Build | **Priority:** P2
-
-**Rationale:** No automated quality gates.
-
-**Acceptance Criteria:**
-- [ ] Workflow runs on PR
-- [ ] Type check passes
-- [ ] Build succeeds
-- [ ] Tests pass (after TEST-001)
-
-**Effort:** 2 hours
-
----
-
-### A11Y-001: Improve Accessibility
-**Type:** Feature | **Priority:** P2
-
-**Rationale:** Emoji ranks have no text alternatives.
-
-**Evidence:**
-- `SeasonLeaderboard.tsx` line 28-32: emoji without aria-label
-
-**Acceptance Criteria:**
-- [ ] Rank emojis have aria-labels
-- [ ] Focus indicators visible
-- [ ] axe-core reports no critical issues
-
-**Effort:** 3 hours
-
----
-
-### FEAT-001: Discord Integration
-**Type:** Feature | **Priority:** P3
-
-**Rationale:** Helper functions exist but not called.
-
-**Evidence:**
-- `src/server/discord.ts` has notification functions
-- Not called in any procedure
-
-**Acceptance Criteria:**
-- [ ] Webhook called when round status changes
-- [ ] Graceful handling if webhook fails
-- [ ] Optional per-league setting
-
-**Effort:** 4 hours
+`SeasonLeaderboard.tsx` uses emoji for rank indicators without
+`aria-label`. Focus indicators may also be missing.
 
 ---
 
 ## Completed
 
-*(Move items here when done)*
-
----
-
-## Notes
-
-- Estimates assume familiarity with codebase
-- P0 items block any deployment
-- P1 items should be done before public launch
-- P2/P3 can be addressed in maintenance sprints
+| ID | Description | Completed |
+|----|-------------|-----------|
+| PWA-ICONS | PWA icon assets (192, 512, apple-touch) | 2026-02-05 |
+| ERROR-001 | ErrorBoundary component + _error.tsx page | 2026-02-05 |
+| ERROR-002 | TRPCError in vote.ts (replaces generic Error) | 2026-02-05 |
+| TYPE-001 | Remove `any` types in vote.ts | 2026-02-05 |
+| TEST-001 | Vote calculation tests (16 cases, vitest) | 2026-02-05 |
+| SCORE-001 | Computed leaderboard scores via groupBy | 2026-02-05 |
+| SCORE-002 | Transaction safety on vote mutations | 2026-02-05 |
