@@ -1,174 +1,140 @@
 # Decision & Uncertainty Log
 
-## About This Document
-
-This log captures decisions made during the takeover assessment, assumptions that were necessary to proceed, and open questions that require human input.
-
 **Evidence Discipline:**
-- **VERIFIED:** Confirmed by reading source files
+- **VERIFIED:** Confirmed by reading source files or runtime checks
 - **INFERENCE:** Reasoned from evidence, with confidence level
-- **OPEN QUESTION:** Unknown, requires human input
+- **RESOLVED:** Question answered, decision made
 
 ---
 
 ## Decisions Made
 
-### DEC-001: PWA Implementation Approach
+### DEC-001: Computed Scores on Read (Strategy 4)
 
-**Decision:** Use `@serwist/next` for service worker implementation
-
-**Rationale (INFERENCE, HIGH confidence):**
-- Modern, actively maintained fork of workbox
-- First-class Next.js support
-- Better TypeScript types than alternatives
-- Simpler configuration than raw workbox
-
-**Alternatives Considered:**
-- `next-pwa` - Popular but less maintained
-- `@ducanh2912/next-pwa` - Fork of next-pwa, also viable
-- Raw workbox - More control but more complexity
-
-**Reversibility:** Easy - just swap the library
-
----
-
-### DEC-002: Skip Full Test Suite for MVP
-
-**Decision:** Add only critical path tests (voting/scoring), not comprehensive coverage
-
-**Rationale (INFERENCE, MEDIUM confidence):**
-- Time constraint: full coverage would take 20+ hours
-- Business logic in vote calculation is highest risk
-- Other code is largely framework boilerplate
-- Can expand coverage post-MVP
-
-**Risk:** Other bugs may ship undetected
-
-**Reversibility:** Easy - add more tests later
-
----
-
-### DEC-003: Keep Hybrid Router Architecture
-
-**Decision:** Do not refactor to pure App Router or pure Pages Router
+**Date:** 2026-02-05
+**Decision:** Remove stored `LeagueMember.totalScore`, compute on read via
+Prisma `groupBy`. Keep `Submission.totalPoints` as scoped cache.
 
 **Rationale (VERIFIED):**
-- NextAuth v5 requires App Router for route handlers (`src/app/api/auth/`)
-- Existing pages use Pages Router conventions
-- Refactoring would be significant effort with no ship benefit
+- Eliminates race conditions in the `finalizeRound` score-increment loop
+- Stays within Prisma's typed API (no raw SQL)
+- `Submission.totalPoints` is well-scoped (one submission, sum of its votes)
+- `LeagueMember.totalScore` was fragile (accumulated across rounds, drifted)
 
-**Evidence:** `src/app/api/auth/[...nextauth]/route.ts` exists alongside `src/pages/`
-
-**Reversibility:** Possible but expensive
-
----
-
-### DEC-004: Defer Discord Integration
-
-**Decision:** Mark Discord webhook integration as P3 (post-MVP)
-
-**Rationale (INFERENCE, HIGH confidence):**
-- Feature is incomplete - functions exist but aren't called
-- Not blocking core user flows
-- League admins can manually notify members
-
-**Evidence:** `src/server/discord.ts` has helper functions never imported by routers
-
-**Reversibility:** Easy - just wire up the calls
+**Implementation:**
+- `computeLeagueScores()` helper in `league.ts` uses `submission.groupBy`
+- Vote mutations wrapped in `$transaction` for atomicity
+- `finalizeRound` simplified to status-only transition
 
 ---
 
-### DEC-005: Create Icons as Placeholders
+### DEC-002: Neon → Prisma Postgres
 
-**Decision:** Generate simple placeholder icons to unblock PWA
+**Date:** 2026-02-05
+**Decision:** Use Prisma Postgres (db.prisma.io) as hosted database.
 
-**Rationale (INFERENCE, MEDIUM confidence):**
-- No existing brand assets in repo
-- PWA blocked until icons exist
-- Placeholders can be replaced with real branding later
+**Rationale:** Owner set up the project. Zero schema changes needed —
+standard PostgreSQL, same Prisma provider.
 
-**Alternative:** Wait for design assets from stakeholder
-
-**Reversibility:** Easy - replace icon files
+**Migration:** Initial migration `20260205180604_init` applied successfully.
+9 tables, RoundStatus enum, all indexes and foreign keys.
 
 ---
 
-### DEC-006: Use Vitest Over Jest
+### DEC-003: next-auth Stays on Beta (No Stable v5 Exists)
 
-**Decision:** Recommend Vitest for test framework
+**Date:** 2026-02-05
+**Decision:** Pin `next-auth@5.0.0-beta.30`. No migration to stable needed.
 
-**Rationale (INFERENCE, HIGH confidence):**
-- Faster than Jest with native ESM support
-- Better Vite/Next.js integration
-- Simpler configuration
-- Compatible with Jest API
+**Research findings:**
+- next-auth v5 stable was **never released**
+- Auth.js merged into Better Auth (September 2025), entered maintenance mode
+- beta.30 is the latest release, receives security patches
+- API surface is frozen — no breaking changes between beta.25 and beta.30
+- Zero code changes required for the upgrade
 
-**Alternative:** Jest is also viable and more established
-
----
-
-## Assumptions Made
-
-### ASM-001: Deployment Target is Vercel
-
-**Assumption:** Project will deploy to Vercel
-
-**Basis (INFERENCE, MEDIUM confidence):**
-- `.gitignore` includes `.vercel/` directory
-- T3 Stack default is Vercel
-- README mentions `vercel deploy`
-
-**If wrong:** Adjust CI/CD and environment variable documentation
+**Future path:** If active auth development is ever needed (new providers,
+MFA, passkeys), migrate to Better Auth. Currently P3.
 
 ---
 
-### ASM-002: No Existing Production Data
+### DEC-004: Keep Hybrid Router Architecture
 
-**Assumption:** This is greenfield deployment, no data migration needed
+**Date:** 2026-01-31
+**Decision:** Do not refactor to pure App Router or pure Pages Router.
 
-**Basis (INFERENCE, MEDIUM confidence):**
-- No migration files exist
-- No references to production URLs
-- Project appears to be in development
-
-**If wrong:** Need data migration strategy
-
----
-
-### ASM-003: PostgreSQL is Required Database
-
-**Assumption:** Project requires PostgreSQL, not SQLite or other
-
-**Basis (VERIFIED):**
-- `prisma/schema.prisma` line 10: `provider = "postgresql"`
-- README specifies PostgreSQL
-
-**Evidence:** Schema uses PostgreSQL-specific features
+**Rationale (VERIFIED):**
+- NextAuth v5 requires App Router for route handlers
+- All app pages use Pages Router conventions
+- Refactoring adds effort with no user-facing benefit
 
 ---
 
-### ASM-004: Single Admin Per League
+### DEC-005: Skip Full Test Suite for MVP
 
-**Assumption:** Each league has exactly one admin (creator)
+**Date:** 2026-01-31
+**Decision:** Test only critical path (voting/scoring). 16 tests via Vitest.
 
-**Basis (VERIFIED):**
-- Schema: `League.adminId` is singular, not a relation to many
-- No admin transfer or multi-admin functionality in routers
-
-**Evidence:** `prisma/schema.prisma` line 72-73
+**Rationale:** Business logic in vote calculation is highest risk. Other
+code is framework boilerplate. Coverage can expand post-MVP.
 
 ---
 
-### ASM-005: Offline Writes Not Required for MVP
+### DEC-006: Vitest Over Jest
 
-**Assumption:** Offline mode only needs to show cached data, not queue submissions
+**Date:** 2026-01-31
+**Decision:** Use Vitest for testing.
 
-**Basis (INFERENCE, LOW confidence):**
-- README claims "offline support" without specifics
-- Offline write queuing is complex
-- Read-only offline is achievable in timeline
+**Rationale:** Faster ESM support, simpler config, Jest-compatible API.
+Added as devDependency on 2026-02-05 (was previously running via npx).
 
-**If wrong:** Need to implement background sync
+---
+
+### DEC-007: No Shadcn Form Components
+
+**Date:** 2026-02-05
+**Decision:** Use plain HTML inputs styled with Tailwind instead of
+installing Shadcn Input/Label/Textarea/Select components.
+
+**Rationale:** Keeps dependencies minimal. The form styling matches the
+design system using the same Tailwind tokens (border-input, bg-background,
+ring-ring, text-muted-foreground). Adding Radix form primitives would be
+over-engineering for a hobby project.
+
+**Reversibility:** Easy — can install Shadcn form components later if
+needed for complex forms (date pickers, comboboxes).
+
+---
+
+### DEC-008: Remove Dead Service Worker Code
+
+**Date:** 2026-02-05
+**Decision:** Delete `src/sw.ts` and `public/sw.js` rather than fixing them.
+
+**Rationale:**
+- `src/sw.ts` imported `@serwist/next` which was never installed
+- `next.config.js` had no serwist integration
+- No code anywhere registered a service worker
+- The files suggested a working SW when none existed
+
+Service worker implementation deferred to PWA-001 (P1). Better to have no
+SW than broken/misleading code.
+
+---
+
+## Resolved Questions
+
+### OQ-002: Is There a Production Database? → RESOLVED
+
+**Answer:** Yes. Prisma Postgres at db.prisma.io, set up by project owner.
+Initial migration applied 2026-02-05.
+
+---
+
+### OQ-006: Should next-auth Stay on Beta? → RESOLVED
+
+**Answer:** Yes. No stable v5 exists. Bumped to latest beta.30 (pinned).
+See DEC-003.
 
 ---
 
@@ -177,120 +143,41 @@ This log captures decisions made during the takeover assessment, assumptions tha
 ### OQ-001: What Are the Brand Assets?
 
 **Question:** What should the PWA icons look like?
-
-**Why it matters:** Icons are required for PWA install but none exist
-
-**Fastest resolution:** Stakeholder provides logo files
-
-**Default (INFERENCE):** Generate placeholder with app name initials
-
----
-
-### OQ-002: Is There a Production Database?
-
-**Question:** Does a production PostgreSQL instance already exist?
-
-**Why it matters:** Determines migration strategy and deployment approach
-
-**Fastest resolution:** Ask project owner
-
-**Default (INFERENCE):** Assume greenfield, create new database
+**Status:** Placeholder icons generated. Replaceable when real branding exists.
 
 ---
 
 ### OQ-003: What's the Acceptable Offline Behavior?
 
 **Question:** Should offline users see cached data only, or queue submissions?
-
-**Why it matters:** Significantly affects service worker complexity
-
-**Fastest resolution:** Product decision from stakeholder
-
-**Default (INFERENCE):** Read-only offline (show cached, block mutations)
+**Status:** No SW implemented. Decision deferred to PWA-001.
 
 ---
 
 ### OQ-004: Is Discord Integration Required for Launch?
 
-**Question:** Must Discord webhooks work before shipping?
-
-**Why it matters:** Feature is partially built but not wired up
-
-**Fastest resolution:** Ask project owner
-
-**Default (INFERENCE):** No - defer to post-MVP
-
----
-
-### OQ-005: What's the Target Node Version?
-
-**Question:** Specific Node.js version required?
-
-**Why it matters:** Affects CI/CD and deployment configuration
-
-**Fastest resolution:** Check hosting provider requirements
-
-**Default (INFERENCE):** Node 18 LTS (mentioned in README)
-
-**Evidence:** `README.md` line 29: "Node.js 18+"
-
----
-
-### OQ-006: Should next-auth Stay on Beta?
-
-**Question:** Upgrade to stable v5, or stay on beta.25?
-
-**Why it matters:** Beta has known vulnerabilities, stable may have breaking changes
-
-**Fastest resolution:** Check if stable v5 released, test auth flow
-
-**Default (INFERENCE):** Upgrade to latest v5 (stable if available)
+**Question:** Must Discord webhooks work before sharing with friends?
+**Status:** Open. Helper functions exist. Wiring is ~1 hour of work.
 
 ---
 
 ### OQ-007: Who Are the Expected Users?
 
-**Question:** Is this for personal use, small group, or public launch?
-
-**Why it matters:** Affects testing rigor, error tracking, and scaling decisions
-
-**Fastest resolution:** Ask project owner
-
-**Default (INFERENCE):** Small group (friends/family) based on README tone
+**Question:** Small group of friends, or wider audience?
+**Impact:** Determines effort on error tracking, scaling, polish.
+**Default assumption:** Small group (friends/family).
 
 ---
 
-## Verified Facts
+## Assumptions
 
-### VF-001: Icons Do Not Exist
-- **Claim:** PWA icons are missing
-- **Evidence:** `ls -la public/` shows only `favicon.ico` and `manifest.json`
-- **Status:** VERIFIED
+### ASM-001: Deployment Target is Vercel
 
-### VF-002: No Prisma Migrations
-- **Claim:** Migration history doesn't exist
-- **Evidence:** `ls -la prisma/` shows only `schema.prisma`
-- **Status:** VERIFIED
+Still assumed. `.gitignore` has `.vercel/`, T3 default is Vercel.
 
-### VF-003: No Service Worker
-- **Claim:** PWA service worker not implemented
-- **Evidence:** Grep for "serviceWorker", "sw.js", "@serwist", "next-pwa" returns nothing
-- **Status:** VERIFIED
+### ASM-004: Single Admin Per League
 
-### VF-004: Viewport Meta Missing
-- **Claim:** Viewport meta tag not in document
-- **Evidence:** `src/pages/_document.tsx` Head contains no viewport tag
-- **Status:** VERIFIED
-
-### VF-005: Zero Test Files
-- **Claim:** No tests exist
-- **Evidence:** Glob for `*.test.ts`, `*.spec.ts`, `__tests__` returns nothing
-- **Status:** VERIFIED
-
-### VF-006: next-auth Is Beta Version
-- **Claim:** Using pre-release NextAuth
-- **Evidence:** `package.json` line 33: `"next-auth": "5.0.0-beta.25"`
-- **Status:** VERIFIED
+Verified. `League.adminId` is singular. No multi-admin support.
 
 ---
 
@@ -299,3 +186,4 @@ This log captures decisions made during the takeover assessment, assumptions tha
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-01-31 | Claude Cowork | Initial assessment |
+| 2026-02-05 | Claude Cowork | Session 2: DEC-001 through DEC-008, resolved OQ-002/006, updated all sections |
